@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Школьный Счетчик & Прогнозист Оценок</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Telegram WebApp JS SDK & Supabase Cloud SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- PWA Manifest & App Icons -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+    <!-- App Header -->
+    <header class="app-header">
+        <div class="header-top">
+            <div>
+                <h1 class="app-title">Дневник & Оценки</h1>
+                <p class="app-subtitle" id="currentPeriodLabel">Четверть 1 • Средний балл</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn-icon" id="btnShareReport" title="Поделиться отчётом">📲</button>
+                <button class="btn-icon" id="btnPortalBind" title="Привязка Дневника">🔗</button>
+                <button class="btn-icon" id="btnSettings" title="Настройки">⚙️</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Summary Overview Card -->
+    <div class="summary-container">
+        <div class="summary-card">
+            <div class="summary-grid">
+                <div class="summary-main">
+                    <span class="summary-label">Общий средневзвешенный</span>
+                    <div class="summary-value">
+                        <span id="overallAvgVal">0.00</span>
+                        <span id="overallFinalBadge" class="summary-final-badge grade-5">5</span>
+                    </div>
+                </div>
+                <div class="summary-stat-box">
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalGradesCount">0</div>
+                        <div class="stat-desc">всего оценок</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="subjectsCount">0</div>
+                        <div class="stat-desc">предметов</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Target Progress Bar -->
+            <div class="target-progress-box">
+                <div class="progress-header">
+                    <span class="progress-title" id="progressStatusText">До итоговой «5»</span>
+                    <span class="progress-target" id="progressRemainingText">осталось 0.12</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="progressFillBar" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- Auto-Sync Live Status Badge -->
+            <div id="autoSyncStatusBadge" style="margin-top: 10px; font-size: 11px; font-weight: 600; color: #34c759; display: flex; align-items: center; justify-content: space-between; background: rgba(52, 199, 89, 0.08); padding: 4px 10px; border-radius: 8px;">
+                <span>🔄 Автосинхронизация: <b id="autoSyncStatusText">Включена (при входе и каждые 15 мин)</b></span>
+                <span id="lastAutoSyncTime" style="color: var(--text-muted);">только что</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Neat 2-Row Grid Navigation Bar -->
+    <div class="tab-bar-wrap">
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="tab-subjects">📖 Предметы</button>
+            <button class="tab-btn" data-tab="tab-analytics">📊 Аналитика</button>
+            <button class="tab-btn" data-tab="tab-predict">🎯 Прогноз</button>
+            <button class="tab-btn" data-tab="tab-simulate">🧪 Симулятор</button>
+            <button class="tab-btn" data-tab="tab-quick">⚡ Черновик</button>
+            <button class="tab-btn" data-tab="tab-schedule">📅 Расписание</button>
+        </div>
+    </div>
+
+    <!-- TAB 1: Subjects List with Multiple Pinned Reminders Banner -->
+    <main id="tab-subjects" class="content-section">
+
+        <!-- Multiple Pinned Reminders Banner on Main Subjects Screen -->
+        <div id="pinnedReminderBannerContainer" style="margin-bottom: 14px; display: none;">
+            <div style="background: var(--accent-blue-light); border: 1px solid var(--accent-blue); border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow-sm);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 11px; font-weight: 800; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 0.5px;">📌 ЗАКРЕПЛЁННЫЕ НАПОМИНАНИЯ</span>
+                    <button id="btnUnpinAllBanners" style="background: none; border: none; font-size: 11px; font-weight: 700; color: var(--accent-blue); cursor: pointer; padding: 0 4px;">Открепить все</button>
+                </div>
+                <div id="pinnedRemindersList" style="display: flex; flex-direction: column; gap: 6px;"></div>
+            </div>
+        </div>
+
+        <div class="section-header">
+            <h2 class="section-title">Предметы</h2>
+            <button class="btn-add" id="btnAddSubject">+ Предмет</button>
+        </div>
+
+        <div class="subject-list" id="subjectsContainer">
+            <!-- Subject Cards dynamically rendered here -->
+        </div>
+    </main>
+
+    <!-- TAB 2: Analytics & Achievements -->
+    <section id="tab-analytics" class="content-section" style="display: none;">
+        <div class="tool-card">
+            <h2 class="tool-card-title">📊 Аналитика Успеваемости</h2>
+            
+            <!-- User XP & Level Card -->
+            <div class="user-xp-card">
+                <div class="user-xp-header">
+                    <div class="user-level-title" id="userLevelTitle">🎓 Уровень 1: Ученик</div>
+                    <div class="user-xp-pts" id="userXpProgressText">0 / 250 XP</div>
+                </div>
+                <div class="xp-track-bar">
+                    <div class="xp-fill-bar" id="userXpFillBar" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- Apple/FinTech Bar Chart Diagram -->
+            <div style="margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">📈 Динамика среднего балла по неделям:</span>
+                    <span style="font-size:11px; color:var(--accent-blue); font-weight:600;">Позиция в классе 🌟</span>
+                </div>
+                
+                <div class="weekly-bar-chart-card">
+                    <div class="chart-grid-lines">
+                        <div class="chart-grid-line"><span class="chart-grid-label">5.0</span></div>
+                        <div class="chart-grid-line"><span class="chart-grid-label">4.0</span></div>
+                        <div class="chart-grid-line"><span class="chart-grid-label">3.0</span></div>
+                    </div>
+                    <div class="chart-bars-flex" id="weeklyGrowthBarChart">
+                        <!-- Bars rendered dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px; margin-bottom:14px;">
+                <div class="analytics-stat-card" style="background:#e6f4ea; border:1px solid #ceead6; flex:1; padding:12px; border-radius:12px;">
+                    <div style="font-size:11px; color:#137333; font-weight:600;">🏆 ЛУЧШИЙ ПРЕДМЕТ</div>
+                    <div style="font-size:15px; font-weight:700; color:#137333; margin-top:2px;" id="bestSubjectName">—</div>
+                    <div style="font-size:12px; color:#137333; font-weight:800;" id="bestSubjectAvg">—</div>
+                </div>
+
+                <div class="analytics-stat-card" style="background:#fce8e6; border:1px solid #fad2cf; flex:1; padding:12px; border-radius:12px;">
+                    <div style="font-size:11px; color:#c5221f; font-weight:600;">⚠️ ЗОНА РИСКА</div>
+                    <div style="font-size:15px; font-weight:700; color:#c5221f; margin-top:2px;" id="worstSubjectName">—</div>
+                    <div style="font-size:12px; color:#c5221f; font-weight:800;" id="worstSubjectAvg">—</div>
+                </div>
+            </div>
+
+            <div class="form-label" style="margin-bottom:8px;">Распределение оценок:</div>
+            <div class="grade-distribution-container" id="gradeDistributionWrap" style="display:flex; flex-direction:column; gap:8px;">
+                <!-- Grade distribution bars rendered dynamically -->
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <h2 class="tool-card-title">🏆 Ачивки & Достижения</h2>
+            <div class="achievements-grid" id="achievementsGrid" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <!-- Achievements rendered dynamically -->
+            </div>
+        </div>
+    </section>
+
+    <!-- TAB 3: Goal Forecaster -->
+    <section id="tab-predict" class="content-section" style="display: none;">
+        <div class="tool-card">
+            <h2 class="tool-card-title">🎯 Прогноз требуемых оценок</h2>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+                Узнай, сколько ещё оценок нужно получить, чтобы дотянуть средний балл до желаемой отметки.
+            </p>
+
+            <div class="form-group">
+                <label class="form-label">Выберите предмет</label>
+                <select id="predictSubjectSelect" class="form-select"></select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Желаемая итоговая оценка</label>
+                <select id="predictTargetMark" class="form-select">
+                    <option value="5">Пятерка (нужен балл ≥ 4.50)</option>
+                    <option value="4">Четверка (нужен балл ≥ 3.50)</option>
+                    <option value="3">Тройка (нужен балл ≥ 2.50)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Вес / Коэффициент планируемой работы</label>
+                <div class="weight-selector" id="predictWeightSelector">
+                    <button class="weight-btn" data-w="1">1</button>
+                    <button class="weight-btn selected" data-w="2">2</button>
+                    <button class="weight-btn" data-w="3">3</button>
+                    <button class="weight-btn" data-w="4">4</button>
+                    <button class="weight-btn" data-w="5">5</button>
+                </div>
+            </div>
+
+            <div class="prediction-box" id="predictionResultBox">
+                <div class="prediction-text" id="predictionText">Выберите предмет для расчета</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TAB 4: Simulator ("What If?") -->
+    <section id="tab-simulate" class="content-section" style="display: none;">
+        <div class="tool-card">
+            <h2 class="tool-card-title">🧪 Примерка оценок («Что если?»)</h2>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+                Добавляй виртуальные оценки и проверяй результат. <i>(Нажмите на оценку в черновике, чтобы её удалить по одной)</i>.
+            </p>
+
+            <div class="form-group">
+                <label class="form-label">Выберите предмет для теста</label>
+                <select id="simSubjectSelect" class="form-select"></select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Выберите вес будущей работы</label>
+                <div class="weight-selector" id="simWeightSelector">
+                    <button class="weight-btn" data-w="1">1</button>
+                    <button class="weight-btn selected" data-w="2">2</button>
+                    <button class="weight-btn" data-w="3">3</button>
+                    <button class="weight-btn" data-w="4">4</button>
+                    <button class="weight-btn" data-w="5">5</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Нажми, чтобы примерить оценку:</label>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-primary" style="background:#34c759; flex:1;" id="btnSimPlus5">+5</button>
+                    <button class="btn-primary" style="background:#007aff; flex:1;" id="btnSimPlus4">+4</button>
+                    <button class="btn-primary" style="background:#ff9500; flex:1;" id="btnSimPlus3">+3</button>
+                    <button class="btn-primary" style="background:#ff3b30; flex:1;" id="btnSimPlus2">+2</button>
+                </div>
+            </div>
+
+            <div style="margin-top: 14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">Черновые оценки (нажми для удаления):</span>
+                    <button id="btnResetSim" style="background:none; border:none; color:var(--accent-blue); font-size:12px; cursor:pointer;">Очистить все</button>
+                </div>
+                <div class="grades-wrap" id="simDraftGradesWrap" style="margin-top: 8px; min-height: 40px;"></div>
+            </div>
+
+            <div class="prediction-box" id="simResultBox" style="margin-top: 14px; border-left-color: #34c759;">
+                <div class="prediction-text" id="simResultText">Выберите предмет и примерьте оценку</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TAB 5: Quick Standalone Math Calculator -->
+    <section id="tab-quick" class="content-section" style="display: none;">
+        <div class="tool-card">
+            <h2 class="tool-card-title">⚡ Быстрый Черновой Калькулятор</h2>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px;">
+                Мгновенный посчет любого набора оценок с коэффициентами без привязки к предметам.
+            </p>
+
+            <div class="form-group">
+                <label class="form-label">Выберите вес:</label>
+                <div class="weight-selector" id="quickWeightSelector">
+                    <button class="weight-btn" data-qw="1">1</button>
+                    <button class="weight-btn selected" data-qw="2">2</button>
+                    <button class="weight-btn" data-qw="3">3</button>
+                    <button class="weight-btn" data-qw="4">4</button>
+                    <button class="weight-btn" data-qw="5">5</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Нажимайте кнопки для добавления:</label>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn-primary" style="background:#34c759; flex:1;" id="btnQuickAdd5">+5</button>
+                    <button class="btn-primary" style="background:#007aff; flex:1;" id="btnQuickAdd4">+4</button>
+                    <button class="btn-primary" style="background:#ff9500; flex:1;" id="btnQuickAdd3">+3</button>
+                    <button class="btn-primary" style="background:#ff3b30; flex:1;" id="btnQuickAdd2">+2</button>
+                </div>
+            </div>
+
+            <div style="margin-top: 14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">Введённые оценки:</span>
+                    <button id="btnQuickClear" style="background:none; border:none; color:var(--accent-blue); font-size:12px; cursor:pointer;">Очистить</button>
+                </div>
+                <div class="grades-wrap" id="quickGradesWrap" style="margin-top: 8px; min-height: 40px;"></div>
+            </div>
+
+            <div class="prediction-box" id="quickResultBox" style="margin-top: 14px; border-left-color: #007aff;">
+                <div class="prediction-text" id="quickResultText">Быстрый балл: 0.00 (Оценка: —)</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TAB 6: Schedule & Dedicated Inline Lesson Editor Panel -->
+    <section id="tab-schedule" class="content-section" style="display: none;">
+        <div class="tool-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h2 class="tool-card-title" style="margin:0;">📅 Расписание Уроков</h2>
+                <button id="btnSyncScheduleFromPortal" style="background:var(--accent-blue-light); color:var(--accent-blue); border:none; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">🔄 Из Дневника</button>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Выберите день недели:</label>
+                <div class="weight-selector" id="dayOfWeekSelector" style="gap:4px;">
+                    <button class="weight-btn selected" data-day="mon">Пн</button>
+                    <button class="weight-btn" data-day="tue">Вт</button>
+                    <button class="weight-btn" data-day="wed">Ср</button>
+                    <button class="weight-btn" data-day="thu">Чт</button>
+                    <button class="weight-btn" data-day="fri">Пт</button>
+                    <button class="weight-btn" data-day="sat" style="color:#e65100;">Сб</button>
+                    <button class="weight-btn" data-day="sun" style="color:#c5221f;">Вс</button>
+                </div>
+            </div>
+
+            <!-- Day Note Card with Toggle Pin -->
+            <div style="background:var(--bg-primary); padding:10px 12px; border-radius:12px; margin-bottom:14px; border:1px solid var(--border-subtle);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">📝 Заметка на этот день:</span>
+                    <div style="display:flex; gap:6px;">
+                        <button id="btnPinDayNote" style="background:var(--accent-blue-light); color:var(--accent-blue); border:none; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:700; cursor:pointer;">📌 Закрепить</button>
+                        <button id="btnSaveDayNote" style="background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:6px; color:var(--text-main); padding:4px 8px; font-size:11px; font-weight:700; cursor:pointer;">Сохранить</button>
+                    </div>
+                </div>
+                <input type="text" id="dayNoteInput" class="form-input" placeholder="например: ВПР по физике во вторник" style="background:var(--bg-card); font-size:13px;">
+            </div>
+
+            <!-- INLINE LESSON EDITOR PANEL (No popup windows!) -->
+            <div id="inlineLessonEditorPanel" style="background:#f4f8ff; border:1px solid #d2e3fc; padding:14px; border-radius:14px; margin-bottom:14px; display:none;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <span style="font-size:14px; font-weight:700; color:var(--accent-blue);" id="inlineLessonEditorTitle">✏️ Редактирование урока</span>
+                    <button id="btnCancelLessonEdit" style="background:none; border:none; font-size:16px; color:var(--text-muted); cursor:pointer;">&times;</button>
+                </div>
+                <input type="hidden" id="inlineLessonEditIndex">
+
+                <div class="form-group">
+                    <label class="form-label">Название урока / предмета</label>
+                    <input type="text" id="inlineLessonNameInput" class="form-input" placeholder="например: Физика, Алгебра">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">📌 Домашнее задание (Д/З)</label>
+                    <input type="text" id="inlineLessonHwInput" class="form-input" placeholder="например: Параграф 14, задачи 1-3">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">📝 Заметка к уроку</label>
+                    <input type="text" id="inlineLessonNoteInput" class="form-input" placeholder="например: Взять халат и отчет">
+                </div>
+
+                <div style="display:flex; gap:8px; margin-top:12px;">
+                    <button class="btn-primary" id="btnSaveInlineLesson" style="margin:0; flex:2;">Сохранить урок</button>
+                    <button class="btn-danger" id="btnDeleteInlineLesson" style="margin:0; flex:1;">Удалить</button>
+                </div>
+            </div>
+
+            <div class="section-header">
+                <span class="form-label" style="margin:0;">Уроки на этот день:</span>
+                <button class="btn-add" id="btnAddLessonInline">+ Добавить урок</button>
+            </div>
+
+            <div id="scheduleLessonsContainer" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+                <!-- Lessons rendered dynamically -->
+            </div>
+        </div>
+    </section>
+
+    <!-- MODAL 1: Add/Edit Grade -->
+    <div class="modal-overlay" id="modalAddGrade">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalGradeTitle">Добавить оценку</h3>
+                <button class="modal-close" id="btnCloseGradeModal">&times;</button>
+            </div>
+            
+            <input type="hidden" id="gradeSubjectId">
+            <input type="hidden" id="editGradeId">
+
+            <div class="form-group">
+                <label class="form-label">Оценка</label>
+                <div style="display: flex; gap: 8px;" id="modalGradeButtons">
+                    <button class="weight-btn" data-g="5" style="background:#e6f4ea; color:#137333;">5</button>
+                    <button class="weight-btn" data-g="4" style="background:#e8f0fe; color:#1a73e8;">4</button>
+                    <button class="weight-btn" data-g="3" style="background:#fef7e0; color:#b06000;">3</button>
+                    <button class="weight-btn" data-g="2" style="background:#fce8e6; color:#c5221f;">2</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Коэффициент (вес) работы</label>
+                <div class="weight-selector" id="modalWeightSelector">
+                    <button class="weight-btn selected" data-w="1">1 (Д/З)</button>
+                    <button class="weight-btn" data-w="2">2 (С/Р)</button>
+                    <button class="weight-btn" data-w="3">3 (П/Р)</button>
+                    <button class="weight-btn" data-w="4">4 (Проект)</button>
+                    <button class="weight-btn" data-w="5">5 (К/Р)</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Заметки / Название работы (опционально)</label>
+                <input type="text" id="gradeCommentInput" class="form-input" placeholder="например: Контрольная №1">
+            </div>
+
+            <button class="btn-primary" id="btnSaveGrade">Сохранить оценку</button>
+            <button class="btn-danger" id="btnDeleteGrade" style="width:100%; margin-top:8px; display:none;">Удалить оценку</button>
+        </div>
+    </div>
+
+    <!-- MODAL 2: Add / Edit Subject with Notes & Pin Button -->
+    <div class="modal-overlay" id="modalAddSubject">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalSubjectTitle">Предмет & Напоминание</h3>
+                <button class="modal-close" id="btnCloseSubjModal">&times;</button>
+            </div>
+
+            <input type="hidden" id="editSubjectId">
+
+            <div class="form-group">
+                <label class="form-label">Название предмета</label>
+                <input type="text" id="newSubjectName" class="form-input" placeholder="например: Геометрия, Химия">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Иконка предмета</label>
+                <input type="text" id="newSubjectIcon" class="form-input" value="📖" maxlength="4">
+            </div>
+
+            <div class="form-group">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <label class="form-label" style="margin:0;">📝 Напоминание / Заметка к предмету</label>
+                    <button type="button" id="btnPinSubjectNote" style="background:var(--accent-blue-light); color:var(--accent-blue); border:none; border-radius:6px; padding:3px 8px; font-size:11px; font-weight:700; cursor:pointer;">📌 Закрепить на главном</button>
+                </div>
+                <input type="text" id="newSubjectNote" class="form-input" placeholder="например: Завтра пересдача К/Р или Принести циркуль">
+            </div>
+
+            <button class="btn-primary" id="btnSaveSubject">Сохранить предмет</button>
+            <button class="btn-danger" id="btnDeleteSubject" style="width:100%; margin-top:8px; display:none;">Удалить предмет</button>
+        </div>
+    </div>
+
+    <!-- MODAL 3: Secure Vault Portal Binding -->
+    <div class="modal-overlay" id="modalPortalBind">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="portalWizardTitle">🛡️ Безопасный Сейф Дневника</h3>
+                <button class="modal-close" id="btnClosePortalModal">&times;</button>
+            </div>
+
+            <!-- STATE A: CONNECTED SAFE DASHBOARD -->
+            <div id="portalConnectedView" style="display: none;">
+                <div class="security-info-card" style="background:#e6f4ea; border-color:#ceead6;">
+                    <div class="sec-card-header">
+                        <span style="font-size:18px;">🟢</span>
+                        <span style="font-weight:700; font-size:14px; color:#137333;" id="connectedPortalNameTitle">Дневник подключен</span>
+                    </div>
+                    <p style="font-size:12px; color:var(--text-secondary);" id="connectedPortalDetails">
+                        Все данные зашифрованы и защищены PIN-кодом
+                    </p>
+                </div>
+
+                <!-- Protected PIN Change / Reset Form -->
+                <div id="pinChangeProtectedBox" style="background:var(--bg-primary); padding:12px; border-radius:12px; margin-top:12px; border:1px solid var(--border-subtle); display:none;">
+                    <div style="font-size:13px; font-weight:700; margin-bottom:8px; color:var(--text-main);">🔑 Подтверждение старого PIN-кода</div>
+                    <div class="form-group">
+                        <label class="form-label">Введите текущий PIN-код для доступа:</label>
+                        <input type="password" id="oldPinVerifyInput" class="form-input" placeholder="••••" style="text-align:center; letter-spacing:4px; font-size:16px;">
+                    </div>
+                    <button class="btn-primary" id="btnConfirmOldPinVerify" style="margin:0;">Подтвердить PIN ➡️</button>
+                    
+                    <div style="text-align:center; margin-top:10px;">
+                        <button id="btnForgotPinReset" style="background:none; border:none; color:#c5221f; font-size:12px; font-weight:600; cursor:pointer; text-decoration:underline;">❓ Забыли PIN-код? (Сброс привязки)</button>
+                    </div>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:16px;">
+                    <button class="btn-primary" id="btnSyncNow" style="background:#007aff;">🔄 Синхронизировать оценки сейчас</button>
+                    <button class="btn-primary" id="btnRebindPortal" style="background:var(--bg-primary); color:var(--text-main); border:1px solid var(--border-subtle);">🔑 Сменить PIN-код / Сброс доступа</button>
+                    <button class="btn-danger" id="btnDisconnectPortal" style="width:100%; padding:12px 0; border-radius:var(--radius-md); font-size:15px; font-weight:600; margin-top:8px;">🗑️ Отвязать и безвозвратно удалить пароли</button>
+                </div>
+            </div>
+            
+            <!-- STATE B: UNCONNECTED WIZARD STEP 1 -->
+            <div id="portalStep1">
+                <div class="security-info-card">
+                    <div class="sec-card-header">
+                        <span style="font-size:16px;">🛡️</span>
+                        <span style="font-weight:700; font-size:13px; color:var(--text-main);">Банковская защита персональных данных</span>
+                    </div>
+                    <ul class="sec-info-list">
+                        <li><b>📱 Полная анонимность:</b> Ваши СНИЛС и пароли никогда не показываются открытым текстом.</li>
+                        <li><b>🔑 Сброс PIN-кода:</b> Если забыли PIN — всегда можно безопасно сбросить привязку и ввести новый.</li>
+                        <li><b>🗑️ Мгновенный сброс:</b> Отвязка навсегда удаляет сохраненные пароли из памяти.</li>
+                    </ul>
+                </div>
+
+                <div class="form-group" style="margin-top:14px;">
+                    <label class="form-label">Выберите ваш школьный портал</label>
+                    <select id="portalSelect" class="form-select">
+                        <option value="mesh">🏛️ МЭШ (Московская Электронная Школа)</option>
+                        <option value="dnevnik">📘 Дневник.ру (Регионы России)</option>
+                        <option value="netcity">🌐 Сетевой Город / ИРТех</option>
+                        <option value="myschool">🏫 Моя Школа / Сферум</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Логин / SNILS / Email</label>
+                    <input type="text" id="portalLoginInput" class="form-input" placeholder="user@mos.ru или СНИЛС">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Пароль от портала</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="portalPasswordInput" class="form-input" placeholder="••••••••••••">
+                        <button class="btn-eye-toggle" type="button" id="btnTogglePortalPass" title="Показать/скрыть пароль">👁️</button>
+                    </div>
+                </div>
+
+                <button class="btn-primary" id="btnPortalStep1Next">Далее: Придумать PIN-код ➡️</button>
+            </div>
+
+            <!-- STATE B: UNCONNECTED WIZARD STEP 2 -->
+            <div id="portalStep2" style="display: none;">
+                <div class="security-info-card" style="background:#e8f0fe; border-color:#d2e3fc;">
+                    <div class="sec-card-header">
+                        <span style="font-size:16px;">🔑</span>
+                        <span style="font-weight:700; font-size:13px; color:#1a73e8;">Придумайте PIN-код замка</span>
+                    </div>
+                    <p style="font-size:12px; color:var(--text-secondary);">
+                        Этот PIN-код заблокирует ваши данные. Только вы сможете расшифровать их при вводе PIN.
+                    </p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Длина PIN-кода:</label>
+                    <div class="weight-selector" id="pinLengthSelector">
+                        <button class="weight-btn selected" data-pinlen="4">4 цифры</button>
+                        <button class="weight-btn" data-pinlen="6">6 цифр</button>
+                        <button class="weight-btn" data-pinlen="8">8 цифр</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" id="pinInputLabel">Введите новый PIN-код:</label>
+                    <div class="password-input-wrap">
+                        <input type="password" id="portalPinInput" class="form-input" placeholder="••••" maxlength="4" style="letter-spacing: 4px; font-size: 18px; text-align: center;">
+                        <button class="btn-eye-toggle" type="button" id="btnTogglePinPass" title="Показать/скрыть PIN">👁️</button>
+                    </div>
+                </div>
+
+                <button class="btn-primary" id="btnConnectPortal" style="background:#34c759;">🔐 Запечатать сейф и привязать</button>
+                <button class="btn-primary" id="btnPortalStep2Back" style="background:var(--bg-primary); color:var(--text-main); border:1px solid var(--border-subtle); margin-top:8px;">⬅️ Назад</button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL 4: Shareable Report Card -->
+    <div class="modal-overlay" id="modalShareReport">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">📲 Табель Успеваемости</h3>
+                <button class="modal-close" id="btnCloseShareModal">&times;</button>
+            </div>
+            
+            <div class="report-card-preview" id="reportCardPreview">
+                <div style="font-size:18px; font-weight:800; text-align:center; margin-bottom:4px;">🎓 Моя Успеваемость</div>
+                <div style="font-size:12px; color:var(--text-muted); text-align:center; margin-bottom:12px;" id="sharePeriodText">Четверть 1</div>
+                
+                <div style="background:var(--bg-primary); padding:14px; border-radius:12px; text-align:center; margin-bottom:12px;">
+                    <div style="font-size:12px; color:var(--text-secondary); font-weight:600;">ОБЩИЙ СРЕДНИЙ БАЛЛ</div>
+                    <div style="font-size:32px; font-weight:800; color:var(--accent-blue);" id="shareAvgVal">4.50</div>
+                </div>
+
+                <div id="shareSubjectsList" style="display:flex; flex-direction:column; gap:6px; font-size:13px;">
+                    <!-- List of subjects for report -->
+                </div>
+            </div>
+
+            <button class="btn-primary" id="btnCopyReportText">📋 Скопировать отчёт в буфер</button>
+        </div>
+    </div>
+
+    <!-- MODAL 5: Settings with Auto-Sync Options -->
+    <div class="modal-overlay" id="modalSettings">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">⚙️ Настройки</h3>
+                <button class="modal-close" id="btnCloseSettingsModal">&times;</button>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Учебный период</label>
+                <select id="settingPeriodSelect" class="form-select">
+                    <option value="Четверть 1">Четверть 1</option>
+                    <option value="Четверть 2">Четверть 2</option>
+                    <option value="Четверть 3">Четверть 3</option>
+                    <option value="Четверть 4">Четверть 4</option>
+                    <option value="Триместр 1">Триместр 1</option>
+                    <option value="Триместр 2">Триместр 2</option>
+                    <option value="Триместр 3">Триместр 3</option>
+                    <option value="Итоговая (Годовая)">Итоговая (Годовая)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Порог округления на «5»</label>
+                <select id="settingThresholdSelect" class="form-select">
+                    <option value="4.50">4.50 (Стандарт: в пользу ученика)</option>
+                    <option value="4.60">4.60 (Строгая школа)</option>
+                    <option value="4.55">4.55 (МЭШ стандарт)</option>
+                </select>
+            </div>
+
+            <!-- Auto-Sync Portal Settings Section -->
+            <div class="form-group" style="background:var(--bg-primary); padding:12px; border-radius:12px; border:1px solid var(--border-subtle);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <label class="form-label" style="margin:0; font-weight:700; color:var(--text-main);">🔄 Автовыгрузка с Дневника (МЭШ/Сферум)</label>
+                </div>
+                <p style="font-size:12px; color:var(--text-secondary); margin-bottom:10px;">
+                    Как только на портале появятся новые оценки, Д/З, коэффициенты или даты К/Р — они автоматически выгрузятся без ручного ввода!
+                </p>
+                <select id="settingAutoSyncSelect" class="form-select" style="background:var(--bg-card);">
+                    <option value="auto_15">⚡ Включено: при входе и каждые 15 минут</option>
+                    <option value="auto_60">⏱️ Включено: раз в час</option>
+                    <option value="manual">🖐️ Только вручную</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Тема оформления (Дизайнерские стили)</label>
+                <select id="settingThemeSelect" class="form-select">
+                    <option value="sage">🌿🕊️ Спокойный Шалфей (Calm Sage / Soft Green)</option>
+                    <option value="twilight">🌌🕊️ Уютные Сумерки (Peaceful Twilight Slate)</option>
+                    <option value="light">☀️ Светлая (Notion / iOS style)</option>
+                    <option value="dark">🌙 Тёмная (Dark Obsidian Glass)</option>
+                    <option value="emerald">🌿 Изумрудная Мята (Fresh Mint)</option>
+                    <option value="pink">🌸 Розовый Quartz (Pastel Rose Gold)</option>
+                    <option value="cyberpunk">⚡ Неоновый Киберпанк (Dark Purple)</option>
+                    <option value="ocean">🌊 Океанский Бриз (Turquoise Blue)</option>
+                    <option value="mandarin">🍊 Сочный Мандарин (Sunset Amber)</option>
+                    <option value="amethyst">🍇 Аметистовый Бархат (Velvet Purple)</option>
+                    <option value="mocha">☕ Кофейный Мокко (Warm Cappuccino)</option>
+                </select>
+            </div>
+
+            <button class="btn-primary" id="btnSaveSettings">Сохранить настройки</button>
+            <button class="btn-danger" id="btnClearAllData" style="width:100%; margin-top:8px;">⚠️ Сбросить все данные</button>
+        </div>
+    </div>
+
+    <!-- App Logic Script -->
+    <script type="module" src="js/app.js"></script>
+    
+    <!-- PWA Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('Service Worker registered', reg))
+            .catch(err => console.error('Service Worker registration failed', err));
+        });
+      }
+    </script>
+</body>
+</html>

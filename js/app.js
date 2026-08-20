@@ -186,10 +186,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             ];
             
+            // Имитация расписания
+            appData.schedule = {
+                mon: [
+                    { subject: 'Алгебра', hw: '№152, 153', note: 'Кабинет 302' },
+                    { subject: 'Русский язык', hw: 'Упр. 45', note: 'Кабинет 210' },
+                    { subject: 'Литература', hw: 'Читать стихи', note: 'Кабинет 210' },
+                    { subject: 'Физкультура', hw: 'Форма', note: 'Спортзал' }
+                ],
+                tue: [
+                    { subject: 'Физика', hw: 'Параграф 12', note: 'Кабинет 405' },
+                    { subject: 'Химия', hw: 'Выучить таблицу', note: 'Кабинет 407' },
+                    { subject: 'Алгебра', hw: '№155', note: 'Кабинет 302' },
+                    { subject: 'Английский язык', hw: 'WB p. 12', note: 'Кабинет 315' }
+                ],
+                wed: [
+                    { subject: 'История', hw: 'Параграф 8', note: 'Кабинет 301' },
+                    { subject: 'Обществознание', hw: 'Конспект', note: 'Кабинет 301' },
+                    { subject: 'Геометрия', hw: '№45, 46', note: 'Кабинет 302' },
+                    { subject: 'Русский язык', hw: 'Упр. 48', note: 'Кабинет 210' }
+                ],
+                thu: [
+                    { subject: 'Английский язык', hw: 'Учить слова', note: 'Кабинет 315' },
+                    { subject: 'Биология', hw: 'Подготовка к тесту', note: 'Кабинет 412' },
+                    { subject: 'География', hw: 'Контурные карты', note: 'Кабинет 401' },
+                    { subject: 'Информатика', hw: '', note: 'Кабинет 409' }
+                ],
+                fri: [
+                    { subject: 'Алгебра', hw: 'Подготовка к К/Р', note: 'Кабинет 302' },
+                    { subject: 'Физика', hw: 'Задача №5', note: 'Кабинет 405' },
+                    { subject: 'Литература', hw: 'Сочинение', note: 'Кабинет 210' },
+                    { subject: 'ОБЖ', hw: '', note: 'Кабинет 105' }
+                ],
+                sat: [],
+                sun: []
+            };
+            
             // Если мы уже загрузили DOM, то перерисовываем интерфейс
             if (typeof renderApp === 'function') {
                 renderApp();
                 if (typeof populateSubjectsSelect === 'function') populateSubjectsSelect();
+                if (typeof renderScheduleTab === 'function') renderScheduleTab();
             }
         }
 
